@@ -1,0 +1,11 @@
+gen	agg	loc
+exp_1	m	y	t
+exp_2	m	y	a
+exp_3	f	m	t
+exp_4	f	m	a
+exp_5	f	o	t
+exp_6	f	o	a
+exp_7	m	y	a
+exp_8	m	y	t
+exp_9	m	m	a
+exp_10	m	m	t

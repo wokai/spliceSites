@@ -1,0 +1,6 @@
+PKG_LIBS=-lm
+PKG_OBJECTS = spliceSites.o
+OBJECTS = $(PKG_OBJECTS)
+all: $(SHLIB)
+clean: 
+	rm -f $(OBJECTS)

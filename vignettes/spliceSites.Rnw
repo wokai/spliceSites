@@ -1,0 +1,603 @@
+%\VignetteIndexEntry{spliceSites}
+%\VignetteIndexEntry{RNA-seq}
+%\VignettePackage{spliceSites}
+\documentclass[a4paper]{article}
+
+\usepackage{hyperref}
+\usepackage[utf8]{inputenc}
+
+\newcommand{\rtx}[1]{{\textsf{#1}}}
+\newcommand{\rcl}[1]{{\texttt{#1}}}
+\newcommand{\rfc}[1]{{\texttt{#1}}}
+\newcommand{\robj}[1]{{\texttt{#1}}}
+
+% Imported from Biobase package:
+\newcommand{\R}{{\textsf{R}}}
+\newcommand{\code}[1]{{\texttt{#1}}}
+\newcommand{\term}[1]{{\emph{#1}}}
+\newcommand{\Rpackage}[1]{\textsf{#1}}
+\newcommand{\Rfunction}[1]{\texttt{#1}}
+\newcommand{\Robject}[1]{\texttt{#1}}
+\newcommand{\Rclass}[1]{{\textit{#1}}}
+\newcommand{\Rmethod}[1]{{\textit{#1}}}
+\newcommand{\Rfunarg}[1]{{\textit{#1}}}
+
+\title{Using spliceSites package}
+\author{Wolfgang Kaisers, CBiBs HHU Dusseldorf}
+\date{\today}
+
+\setlength\parindent{0pt} % \noindent for each paragraph
+
+\begin{document}
+\maketitle
+\SweaveOpts{concordance=TRUE}
+
+\section{Introduction}
+
+The data structures and algorithms in this package work on align-gaps which are found in alignments of RNA-seq data. The analysis starts by reading BAM-files \cite{sam}, so this package assumes that the sequenced RNA is already aligned by external alignment software (e.g. tophat \cite{tophat2}). This package technically builds upon CRAN package 'rbamtools' which performs the reading and data collecting part and CRAN package 'refGenome' from which processed annotation data is imported.\\
+
+Information on splice events focuses on align-gaps (which are identified by the \textbf{N} CIGAR tag) here in this package. Gapped alignments are highly informative because they are calculated by specialized alignment recognition algorithms. Ungapped alignments are only globally counted but not further traced here. This cuts out a relative small but specific part of the alignment information. By doing this possibly valuable information but also many uncertainties are removed from the calculated models.\\
+
+Align-gaps are assumed to arise from removed introns within the mature mRNA (called splice-sites). This package technically deals with align-gaps but heavily relies on the fact that align-gaps represent exon junctions (EJ). Thats why the descriptions contain many switches between the align-view and the EJ view. An important detail at this point is that the inner align frontiers represent exon-intron boundaries. Their positions, read-counts and the surrounding DNA-sequence are the central objectives of the contained algorithms. In contrast, the outer align-boundaries are merely considered as technical artifacts.\\
+
+\paragraph{Nomenclature.} Align-gaps denote gaps in individual aligns. Each align-gap corresponds to a single \textbf{N} CIGAR-item. A gap-site is the unique genomic range where align-gaps are placed. Typically, there are many align-gaps which share one gap-site. A gap-site is described by the framing two genomic ranges: The \textbf{left} range denotes the one with the lower genomic coordinates which is on the left side of the gap in genome-browser views. The corresponding \textbf{right} range denotes the one with the higher genomic coordinates. The \textbf{left}-\textbf{right} nomenclature is independent of strand orientation of genes.\\
+
+Each range is described by a start (left) and an and (right) position. All position values are 1-based, which means that the leftmost character in a sequence is addressed by 1. Start and stop positions denote the 1-based position of the first and last nucleotide, respectively, which are contained in the range.\\
+
+The content of one BAM-file is associated here with one biological probe. 
+
+
+\section{Formal concepts}
+
+\subsection{Quantification of gap-site align numbers}
+
+Quantification of align numbers for gap-sites differs from the widely used \textbf{FPKM} method in that gap sites are not associated with some kind of genomic extend which is addressed by the \textbf{K} (kilobase of transcript). Instead number of aligns which contain a specified gap-site (defined by a unique left-end and right-start value) are counted and normalized by a somehow global align number. The spliceSite package provides two quantification indexes.\\
+
+\paragraph{GPTM} \rtx{gptm} abbreviates "Gapped Per Ten Million reads". The value represents the relative amount of aligns for a specific EJ in relation to ten million aligned reads per probe. The definition of \rtx{gptm} is:
+\[
+    gptm = \frac{\texttt{Number of aligns per gap-site}}{\texttt{Total number of aligns}} \cdot 10^7.
+\]
+
+\paragraph{RPMG} RPMG abbreviates "Reads Per Million Gapped". The value represents the relative amount of aligns for a specific EJ in relation to one million gapped reads per probe. The value is calculated as
+\[
+    rpmg = \frac{\texttt{Number of aligns per splice site}}{\texttt{Number of gapped aligns in probe}} \cdot 10^6.
+\]
+
+Both values are influenced by the size of the underlying align pool. During merge operations, the site-specific and total align numbers are summed and the \rtx{gptm} and \rtx{rpmg} values are recalculated. The resulting values are weighted by the align numbers in each component and differs from the mean. Both values are given as rounded values.
+
+
+\section{Technical description of data structures}
+
+Like most software products, this package uses data containers and associated functions. In the following technical part, each container type will be described. The associated functions will be specified direct subsequently for each class.
+
+
+\paragraph{spliceSites data container} The data-structures in this package can be divided in two lineages of data containers and some additional classes which are used for specialized tasks. The two lineages are unilateral container (derived from \rcl{cRanges}) and bilateral container (derived from \rcl{gapSites}):
+\begin{itemize}
+  \item \rcl{cRanges} (centered ranges) focus on exon-intron boundaries on one side of the gap-sites. They contain coordinates of genomic ranges (refid,start,end) and additionally a \rtx{position} inside. The \rtx{position} points to where the gap-boundary (exon-intron boundary) lies inside the range. The derived classes \rcl{cdRanges} and \rcl{caRanges} additionally contain DNA and amino acid (AA) sequences.
+  \item \rcl{gapSites} (Gapped ranges) focus on two genomic ranges which together surround an gap-sites. The ranges represent two (connected) exons with an interposed intron. The derived classes \rcl{annGapSites}, \rcl{dnaGapSites} and \rcl{aaGapSites} additionally contain annotation data, DNA-sequence and amino-acid sequence respectively.
+\end{itemize}
+
+Additionally there is a class \rcl{keyProfiler} which is used to cumulate values for \rcl{gapSites} in multiple Probes (BAM-files) for probe subgroups (e.g. gender specific) and a class \rcl{maxEntScore} from which maxEntScores can be calculated \cite{mxe}.
+
+\subsection{\rcl{gapSites} class lineage}
+
+From the base class \rcl{gapSites} the lineage derives three child classes: \rcl{dnaGapSites}, \rcl{aaGapSites} which additionally contain a sequence slot and the class \rcl{annGapSites} in which annotation data is shifted into the main table.\\
+
+\paragraph {gapSites} is the central container of the \rtx{spliceSite} package. \rcl{gapSites} objects are intended to organize information about gap-sites.  Typically the collected sites arise from analysis of multiple probes (BAM-files). The underlying concept is to accumulate information about the biological existence of gap-sites over the whole experiment.
+
+The \rcl{gapSites} class contains the following slots:\\
+\vspace*{5mm}
+\begin{tabular}{l|ll}
+  Name & Type & Content\\
+  \hline
+  dt          & data.frame  & Table containing the main (gap-site) data\\
+  nAligns     & numeric     & Total number of aligns counted in the data source \\
+  nAlignGaps  & numeric     & Total number of align gaps counted in the data source\\
+  lann        & data.frame  & Annotation data for left side\\
+  rann        & data.frame  & Annotation data for right side\\
+  profile     & data.frame  & Table describing the probes in the data source\\
+  \hline
+\end{tabular}
+%\vspace*{5mm}
+The \rtx{nAlignGaps} value counts the number of \textbf{N} CIGAR-items in the data source. Therefore aligns with two or more align-gaps genereate multiple counts. It is possible albeit uncommon to have more \rtx{nAlignGaps} than \rtx{nAligns}.\\
+
+\rcl{gapSites} keep the gap-sites data in the \rtx{dt} slot inside a \rcl{data.frame}. Each gap-site is represented as one record (line). The table keeps 12 columns which are organized as follows:\\
+\vspace*{5mm}
+\begin{tabular} {l|ll}
+  Name & Type & Content\\
+  \hline
+  id      & numeric & Row identifier\\  
+  seqid   & factor  & Sequence id (usually chromosome name)\\
+  lstart  & numeric & Start position of left framing range\\
+  lend    & numeric & End position left framing range\\
+  rstart  & numeric & Start position of right framing range\\
+  rend    & numeric & End position of right framing range\\
+  gaplen  & numeric & Number of nucleotides in gap\\
+  strand  & numeric & "+" or "-" or "*" \\
+  nAligns & numeric & Number of aligns\\ 
+  nProbes & numeric & Number of probes (BAM-files)\\
+  gptm    & numeric & Expression quantifier\\
+  rpmg    & numeric & Expression quantifier\\
+  \hline
+\end{tabular}
+\vspace*{5mm}
+\\
+The \rtx{gptm} and \rtx{rpmg} quantifier contain the previously described quantification scores. To be precise the \rtx{lend} value contains the 1-based position of the last exon nucleotide. \rtx{rstart} denotes the 1-based position of the first exon nucleotide.
+
+\paragraph{dnaGapSites and aaGapSites} Both classes derive from \rcl{gapSites} and additionally contain a \rtx{seq} slot which contains a \rcl{DNAStringSet} or \rcl{AAStringSet} object respectively. 
+
+\paragraph{annGapSites} \rcl{annGapSites} derives from \rcl{gapSites} and additionally keeps information about number of probes and annotation data (which is produced by overlapping). \rcl{annGapSites} are returned by the member function \rfc{annotation} for class \rcl{gapSites}.
+
+\paragraph{Creation of gapSites} objects is done by directly reading gap-site data from BAM files.
+
+\subsection{Reading align data from BAM-files}
+
+The spliceSite package contains four different functions for reading gap-sites from BAM-files. All of them return \rfc{gapSites} objects. \rfc{getGapSites} and \rfc{alignGapList} read from single BAM files via bamReader. \rfc{readMergedBamGaps} and \rfc{readTabledBamGaps} receive names of BAM-files and return multi-probe merged gap-site data:\\
+
+\begin{tabular}{l|lll}
+  Function & Argument & Read range & Profile\\
+  \hline
+  getGapSites & bamReader & Range within BAM-file & no\\
+  alignGapList & bamReader & BAM-file & no\\
+  readMergedBamGaps & filenames & BAM-files & no\\
+  readTabledBamGaps & filenames & BAM-files & yes\\
+  \hline
+\end{tabular}
+\\
+\paragraph{Existing BAM-indices} are an important prerequisite for reading aligns. Either must a given \rcl{bamReader} contain an intitialized index or a name of BAM-index files must be provided. By default, BAM-index files are expected to be named as the BAM-files with a ".bai" suffix.\\
+
+
+\paragraph{getGapSites} reads gap-sites for a given seqid from a single BAM-file (provided as \rcl{bamReader}). The seqid argument is given as numeric 1-based index.
+<<>>=
+library(spliceSites)
+bam<-character(2)
+bam[1]<-system.file("extdata","rna_fem.bam",package="spliceSites")
+bam[2]<-system.file("extdata","rna_mal.bam",package="spliceSites")
+reader<-bamReader(bam[1],idx=TRUE)
+gs<-getGapSites(reader,seqid=1)
+gs
+@
+
+\paragraph{alignGapList} also works on a given \rcl{bamReader} but reads gap-sites from the entire file and internally calls \rfc{bamGapList}.
+
+<<>>=
+ga<-alignGapList(reader)
+ga
+@
+
+Both functions test the given reader for file-open status (via \rfc{isOpen}) and for initialized index.
+
+
+\paragraph{readMergedBamGaps} takes a vector of BAM-file names (plus optionally names of the corresponding BAM-index files) and reads gap-site data from each BAM-file (via rbamtools bamGapList). gap-site data is  merged into a  \rcl{gapSites} object. The number of files in which each align-gap site is identified is counted in the value \term{nProbes}.
+<<>>=
+mbg<-readMergedBamGaps(bam)
+mbg
+@
+
+\paragraph{readTableBamGaps} takes a vector of BAM-file names (plus optionally names of the corresponding BAM-index files) and a profile table. The profile tables describes the probe profile for each BAM-file (number of BAM-files = number of rows in profile). Every column describes a categorial partition of the BAM-files. For each category, the number of probes (=files), number of aligns and optionally gptm-values are separately calculated. \rfc{readTabledBamGaps} collects gap-site data (as \rfc{readMergedBamGaps} and adds profile columns. The returned \rcl{gapSites} object also contains a profile table which can be retrieved via \rfc{getProfile}.
+<<>>=
+prof<-data.frame(gender=c("f","m"))
+rtbg<-readTabledBamGaps(bam,prof=prof,rpmg=TRUE)
+rtbg
+getProfile(rtbg)
+@
+
+
+\subsection{\rcl{cRanges} class lineage}
+
+\rcl{cRanges} represent genomic ranges which contain a point of interest inside. In the present setting ranges lie around  (left or right) gap-site borders. The class is intended to manage sequence data which crosses exon-intron boundaries. \rtx{position} is defined as the 1-based position of the last exon nucleotide. For '+' strand, position=4 means, that usually the 5th and 6th nucleotides are 'GT'.\\
+
+From the base class \rcl{cRanges} the lineage derives two child classes: \rcl{cdRanges} and \rcl{caRanges} which additionally contain a sequence slot. Sequence information is important for validation splice-sites because required intronic sequence is not contained in the BAM-align structures an must be included from reference sequence.
+
+\paragraph {cRanges} containes a \rcl{data.frame} in a single slot. Each centered range is represented as one record (line). The table keeps 7 columns which are organized as follows:\\
+\vspace*{5mm}
+\begin{tabular} {l|ll}
+  Name & Type & Content\\
+  \hline
+  seqid   & factor  & Sequence id (usually chromosome name)\\
+  start   & numeric & Start position of range\\
+  end     & numeric & End position range\\
+  strand  & numeric & "+" or "-" or "*" \\  
+  position& numeric & \\
+  id      & numeric & Row identifier\\ 
+  nAligns & numeric & Number of aligns\\ 
+  \hline
+\end{tabular}
+\vspace*{5mm}
+
+
+\subsection{Extracting gap-site boundary ranges}
+
+\paragraph{xJunc functions} extract ranges from \rcl{gapSites} objects. \rcl{lJunc} and \rcl{rJunc} objects extract ranges around one gap-site boundaries and return \rcl{cRanges} objects. The position values point to the gap-site (exon-intron) boundary.\\
+
+\rcl{rlJunc} objects extract ranges from both sides of the gap-site and return \rcl{gapSites} objects. Inside the returned object the contained data.frame has two additional columns (lfeatlen and rfeatlen) which mark the boundary position.\\
+
+The ranges are intended to be padded with DNA-sequence. Therefore the given strand value is used: 
+<<>>=
+ljp<-lJunc(ga,featlen=6,gaplen=6,strand='+')
+ljp
+ljm<-lJunc(ga,featlen=6,gaplen=6,strand='-')
+ljm
+rjp<-rJunc(ga,featlen=6,gaplen=6,strand='+')
+rjp
+rjm<-rJunc(ga,featlen=6,gaplen=6,strand='-')
+rjm
+
+lrjp<-lrJunc(ga,lfeatlen=6,rfeatlen=6,strand='+')
+lrjp
+lrjm<-lrJunc(ga,lfeatlen=6,rfeatlen=6,strand='-')
+lrjm
+@
+
+
+\paragraph{xCodons functions.} \rfc{lCodons} and \rfc{rCodons} both take and return \rcl{cRanges} objects. The functions provide two tasks:
+\begin{itemize}
+  \item Shift start position for sequence extraction according to reading frame.
+  \item Truncate range end to full codon size.
+\end{itemize}
+Both operations act unilateral on ranges and so strand information must be provided in order to decide which side of the range (left or right) represents start and end. 
+
+\rfc{lCodons} and \rcl{rCodons} take a numeric frame argument and a logical keepStrand argument besides the \rcl{cRanges} object. For frame=2 or 3, the start position is shifted 1 or 2 nucleotides respectively. The sequence length is then truncated to the largest contained multiple of 3. The functions then correct the position-values in order to keep the positions pointer on the same nucleotide.When keepStrand is FALSE' (the default), the \rfc{lCodons} function sets all strand entries to "+" and the \rfc{rCodons} sets all Strand entries to "-".\\
+
+The \rfc{lCodons} function should be used for "+"-strand and the \rfc{rCodons} function should be used for "-"-strand.
+<<>>=
+ljp1<-lCodons(ljp,frame=1)
+ljp1
+ljp2<-lCodons(ljp,frame=2)
+rjm1<-rCodons(ljm,frame=1)
+rjm2<-rCodons(ljm,frame=2)
+@
+
+The \rfc{xCodons} functions provide a preparative step which allows translation of subsequently added DNA-sequence into AA-sequence. The strand information is therein used to determine the fraction of DNA-sequence must be \rfc{reverseComplement}'ed.
+
+\paragraph{The lrCodons function} works similar as the \rfc{xCodons} functions but does the same on the two gap-site enframing ranges simultaneously. \rfc{lrCodons} takes and returns \rcl{gapAligns} objects. The strand value can be manually set (default: '*') for later use by \rfc{dnaGapAligns}
+<<>>=
+lr1<-lrCodons(lrjp,frame=1,strand='+')
+lr2<-lrCodons(lrjp,frame=2,strand='+')
+lr3<-lrCodons(lrjp,frame=3,strand='+')
+@
+
+\paragraph{The c-Operator} for \rcl{cRanges} and \rcl{gapSites} is used to combine objects made for different frame and strand together to one \rcl{cRanges} or \rcl{gapSites} for joint subsequent analysis:
+
+In the next step we transform these ranges into codons in both directions and all three frames.
+<<>>=
+ljpc<-c(ljp1,ljp2)
+rjmc<-c(rjm1,rjm2)
+lrj<-c(lr1,lr2,lr3)
+@
+
+In order to provide better readable tables there is an optional function for sorting the combined \rcl{cRanges} and \rcl{gapSites}:
+<<>>=
+ljpc<-sortTable(ljpc)
+rjmc<-sortTable(rjmc)
+lrj<-sortTable(lrj)
+@
+
+\paragraph{Trim and resize functions} provide upper size limits or fixed size for boundary ranges in \rcl{gapSites} objects. \rfc{trim\_left} works on left boundary ranges (i.e. \robj{lstart} and \robj{rend} values) and \rfc{trim\_right} works on right boundary ranges (i.e. \robj{rstart} and \robj{rend}).\\
+
+All four functions leave the inner boundaries (\robj{lend} and \robj{rstart}) unchanged.
+<<>>=
+trim_left(lrj,3)
+trim_right(lrj,3)
+resize_left(lrj,8)
+resize_right(lrj,8)
+@
+
+
+\subsection{Provide additional information}
+
+Genuine \rcl{gapSites} and \rcl{cRanges} objects contain numeric coordinate and count data but no sequence or gene association. The conceptual idea is to add gene-annotations and sequence data to primed coordinate containers. 
+
+
+\paragraph{Gene annotation} data can be added with the \rfc{annotate} and \rfc{annotation<-} functions. Therefore a \rcl{refGenome} object (\rcl{ucscGenome} or \rcl{ensemblGenome} from package \rtx{refGenome}) must be provided.
+
+<<>>=
+ucf<-system.file("extdata","uc_small.RData",package="spliceSites")
+uc<-loadGenome(ucf)
+annotation(ga)<-annotate(ga,uc)
+@
+
+Adding annotation data internally works by calling the \rfc{overlap} functions (refGenome package). \rfc{annotate} calls \rfc{overlap} for both framing ranges and adds the results to \rcl{gapSites} slots lann and rann. So there will eventually be different annotation for the two ranges. The same mechanism also works for \rcl{gapSites} objects which arise from \rfc{readTabledBamGaps}:
+<<echo=FALSE>>=
+annotation(rtbg)<-annotate(rtbg,uc)
+@
+
+\paragraph{Strand information} can be deduced from gene annotation. The \rfc{getAnnStrand} function looks at the annotation derived strand information on both sides. When the strand information is equal, the function takes the value as strand for the gap-site. Otherwise the strand will be set to '*'. The strand information can be integrated into the internal data.frame by using the \rfc{strand} function.
+
+<<>>=
+strand(ga)<-getAnnStrand(ga)
+@
+
+\paragraph{addGeneAlignPart} adds information about distribution of aligns over different gap-sites for each gene.
+<<>>=
+gap<-addGeneAlignPart(ga)
+gap
+@
+
+
+\paragraph{DNA-sequence} can be added from a \rcl{DNAStringSet} (Biostrings) object via the \rfc{dnaRanges} function. \rfc{dnaRanges} function takes a \rcl{cRanges} object and a \rcl{DNAStringSet} object and adds the corresponding DNA-sequence to each contained range. The function returns an object of class \rcl{cdRanges}.
+
+We first load an example \rcl{DNAStringSet} which contains the reference sequence. The sample object \term{dna\_small} contains a small extract of UCSC human reference sequence.
+<<>>=
+dnafile<-system.file("extdata","dna_small.RData",package="spliceSites")
+load(dnafile)
+dna_small
+@
+
+Then we create a \rcl{cdRanges} instance \rfc{dnaRanges} and then produce a seqlogo:
+<<eval=TRUE,fig=TRUE>>=
+ljpcd<-dnaRanges(ljpc,dna_small)
+seqlogo(ljpcd)
+@
+
+\paragraph{Amino-Acid sequences} can be obtained after the previous preparatory steps are done. The \rfc{translate} function converts a \rcl{cdRanges} object into a \rcl{caRanges} object by translating the contained DNA-sequences. The function internally uses the Bioconductor Biostrings \rfc{translate} function.
+<<>>=
+ljpca<-translate(ljpcd)
+@
+
+
+\paragraph{Extracting subsets} from \rcl{cRanges} and \rcl{gapSites} (and derived classes) can be done with \rfc{extractX} functions. They come in two flavours: \rfc{extractRange} and \rfc{extractByGeneName}. Main application for these function is visual inspectation of the results.\\
+
+\rfc{extractRange} takes a \rcl{cRanges} or \rcl{gapSites} object and a triple of genomic coordinates (seqid, start, end). From the given \rcl{cRanges} object, the stored ranges which are contained in the range defined by the coordinates is extracted and returned as \rcl{cRanges} object.
+<<>>=
+# A) For gapSites
+extractRange(ga,seqid="chr1",start=14000,end=30000)
+# B) For cRanges
+lj<-lJunc(ga,featlen=3,gaplen=6,strand='+')
+extractRange(lj,seqid="chr1",start=14000,end=30000)
+@
+
+\rfc{extractByGeneName} also takes a \rcl{cRanges} or \rcl{gapSites} object but instead of a numeric range, a vector of gene-names and a \rcl{refGenome} object. The \rcl{refGenome} object first calculates a set of numerical coordinates from the given gene-names and then calls \rfc{extractRange} for each set of coordinates. The resulting objects are then concatenated.
+
+<<>>=
+lj<-lJunc(ga,featlen=6,gaplen=3,strand='+')
+ljw<-extractByGeneName(ljp,geneNames="POLR3K",src=uc)
+ljw
+ljw<-extractByGeneName(ljpcd,geneNames="POLR3K",src=uc)
+ljw
+@
+
+
+\subsection{Working with amino-acid (AA) sequences}
+
+For approaching AA based views whe first prepare longer DNA sequences for different frames and add DNA-sequence:
+<<>>=
+l<-12
+lj<-lJunc(mbg,featlen=l,gaplen=l,strand='+')
+ljc<-c(lCodons(lj,1),lCodons(lj,2),lCodons(lj,3))
+
+lrj<-lrJunc(mbg,lfeatlen=l,rfeatlen=l,strand='+')
+lrjc<-c(lrCodons(lrj,1),lrCodons(lrj,2),lrCodons(lrj,3))
+
+jlrd<-dnaRanges(ljc,dna_small)
+@
+
+\paragraph{Translation of DNA} sequences can simply be obtained by using \rfc{translate}:
+<<>>=
+jlrt<-translate(jlrd)
+jlrt
+@
+
+
+\paragraph{truncateSeq function} addresses stop codons '*' which may be identified in the amino acid sequence. The function truncates the sequence when the stop-codon appears behind (right-hand of) the position and removes rows where the stop-codon appears before (left-hand of) the position. This removes data-sets where the exon-intron boundary lies downstream of a stop-codon.
+
+<<>>=
+jlrtt<-truncateSeq(jlrt)
+jlrtt
+@
+
+
+\paragraph{trypsinCleave function} performs in silico trypsinisation on the provided AA sequences. Trypsin sites are identified by the regex rule "[RK](?!P)" which implements the "Keil"-rule. From the sequence fragments, the one which contains the position marked gap-site (exon-intron) boundary is returned.
+<<>>=
+jtry<-trypsinCleave(jlrtt)
+jtry<-sortTable(jtry)
+@
+
+\subsection{Writing output tables}
+
+Write functions provide functionality for exporting generated tables into '.csv' files.
+
+\paragraph{write.annDNA.tables} writes content of \rcl{gapSites} objects together with DNA-sequence segments.
+
+<<eval=FALSE>>=
+annotation(rtbg)<-annotate(rtbg,uc)
+write.annDNA.tables(rtbg,dna_small,"gapSites.csv",featlen=3,gaplen=8)
+@
+
+
+\paragraph{write.files} works on \rcl{caRanges} objects and produces two output files: One '.csv' file which contains a copy of the data and a '.fa' file which contains sequence in fasta format.
+<<eval=FALSE>>=
+write.files(jtry,path=getwd(),filename="proteomic",quote=FALSE)
+@
+The fasta headers contain two tags which are separated by a vertical bar '|'. The first item is the \robj{id} of the corresponding table row and the second item is the prefix of the filename.
+
+
+\subsection{Working with alternative splice-sites}
+
+Alternative splice-sites are sites where one exon-intron boundary corresponds to multiple counterparts. In gap-site tables, alternative sites are characterized by multiple occuring entries of \robj{lend} or \robj{rstart}. The \rfc{alt\_left\_ranks} function work by putting gap-sites which share the same \robj{rstart} values in a group which is identified by the same \robj{alt\_id} value. Gap-sites which don't share their \robj{rstart} value with any other gap-site have the \robj{alt\_id} value 0.
+
+\paragraph{The alt\_left\_ranks function} looks for multiple entries of \robj{rstart} values and returns a table with 6 numeric columns:\\
+\begin{tabular} {l|l}
+  Name & Content\\
+  \hline
+  id           & Row identifier (from \rcl{gapSites} object\\  
+  alt\_id      & Group number. Identifies group of gap-sites which share same ; 0 for singular entries\\
+  diff\_ranks  & Rank of gaplen inside same alt\_id group\\
+  gap\_diff    & Difference in gaplen to the next greater gaplen value in group \\
+  nr\_alt      & Number of rows with same rstart value \\  
+  \hline
+\end{tabular}\\
+\newline
+So the rank numbering increases with gaplen (from inside to outide) and the \robj{gap\_diff} values are always $ \geq 0$ because the row with the smallest gaplen gets the rank 1 and gap\_diff 0.\\
+When the option \robj{extensive=TRUE} is given, four more columns are contained in the result table: seq (seqid), group (=rstart, by which the input table is grouped), alt (lend) and len (gaplen).
+
+<<>>=
+al<-alt_left_ranks(ga)
+@
+
+
+\paragraph{The alt\_ranks function} combines the results of \rfc{alt\_left\_ranks} and \rfc{alt\_right\_ranks} into one table. There should be characteristic peaks at multiples of 3:
+<<>>=
+ar<-alt_ranks(ga)
+@
+
+The tabled \robj{gap\_diff} values can be plotted with:
+<<fig=TRUE>>=
+plot_diff_ranks(ga)
+@
+
+\paragraph{The plot\_diff function} gives a visual overview about the congruence between gap-site positions and the associated annotations. Differences of zero say that a gap-site boundary exactly meets the annotated position.
+<<fig=TRUE>>=
+aga<-annotation(ga)
+plot_diff(aga)
+@
+
+
+\paragraph{MaxEntScores} Maximum Entropy (MaxEnt) scores were developed by Gene Yeo and Christopher Burge \cite{mxe} and are widely accepted as method for quantification of intrinsic EJ strength for a given sequence motif from the exon-intron boundary. MaxEnt scores can be calculated for the 5' and the 3' side of the EJ. MaxEnt scores can be calculated for vectors of sequences for a given position (1-based position of last exon nucleotide) using the \rfc{score3} and \rfc{score5} functions.\\
+For sliding window calculations on longer DNA-sequences the \rfc{scoreSeq5} and \rfc{scoreSeq3} functions can be used. The \rfc{addMaxEnt} function is used for adding MaxEnt scores to a \rcl{gapSites} object.
+
+<<>>=
+mes<-load.maxEnt()
+score5(mes,"CCGGGTAAGAA",4)
+score3(mes,"CTCTACTACTATCTATCTAGATC",pos=20)
+
+sq5<-scoreSeq5(mes,seq="ACGGTAAGTCAGGTAAGT")
+sq3<-scoreSeq3(mes,seq="TTTATTTTTCTCACTTTTAGAGACTTCATTCTTTCTCAAATAGGTT")
+
+gae<-addMaxEnt(ga,dna_small,mes)
+gae
+table(getMeStrand(gae))
+sae<-setMeStrand(gae)
+sae
+@
+
+\paragraph{HBond scores} The HBond score provides a measure for the capability of a 5' splice-site to form H-bonds with the U1 snRNA \cite{hbs}. The HBond score can be calculated for a vector of sequences.
+<<>>=
+# 
+hb<-load.hbond()
+seq<-c("CAGGTGAGTTC","ATGCTGGAGAA","AGGGTGCGGGC","AAGGTAACGTC","AAGGTGAGTTC")
+hbond(hb,seq,3)
+@
+or can be added to \rcl{gapSites} and \rcl{cdRanges} objects:
+<<>>=
+gab<-addHbond(ga,dna_small)
+# D) cdRanges
+lj<-lJunc(ga,featlen=3,gaplen=8,strand='+')
+ljd<-dnaRanges(lj,dna_small)
+ljdh<-addHbond(ljd)
+@
+
+
+\subsection{Creating ExpressionSet objects containing gap-site align-count values.}
+
+In order to provide technical requirements for analyzing expression data inside the standard Bioconductor framework, there is a \rfc{readExpSet} function which produces \rcl{ExpressionSet} objects with \robj{rpmg} (default) and \robj{gptm} expression values.
+
+\paragraph{readExpSet} reads gap-site aligns abundance from a given list of BAM file names into \rcl{ExpressionSet}
+
+<<>>=
+prof<-data.frame(gender=c("f","m"))
+rtbg<-readTabledBamGaps(bam,prof=prof,rpmg=TRUE)
+getProfile(rtbg)
+
+meta<-data.frame(labelDescription=names(prof),row.names=names(prof))
+pd<-new("AnnotatedDataFrame",data=prof,varMetadata=meta)
+es<-readExpSet(bam,phenoData=pd)
+@
+
+There are two annotation functions for ExpressionSets which are created by \rfc{readExpSet}: \rfc{annotate} and \rfc{uniqueJuncAnn}. Annotate finds overlaps to a given \rcl{refGenome} object. \rfc{uniqueJuncAnn} finds exact matches with known splice-sites:
+<<>>=
+ann<-annotate(es,uc)
+ucj<-getSpliceTable(uc)
+uja<-uniqueJuncAnn(es,ucj)
+@
+
+
+\paragraph{readCuffGeneFpkm} reads FPKM values from all given cufflinks files and collects the values into an \rcl{ExpressionSet}. In order to get unique gene identifier, the contained values are grouped and for each gene the maximum FPKM values is selected.
+
+<<>>=
+n<-10
+cuff<-system.file("extdata","cuff_files",paste(1:n,"genes","fpkm_tracking",sep="."),package="spliceSites")
+gr<-system.file("extdata","cuff_files","groups.csv",package="spliceSites")
+groups<-read.table(gr,sep="\t",header=TRUE)
+meta<-data.frame(labelDescription=c("gender","age-group","location"),row.names=c("gen","agg","loc"))
+phenoData<-new("AnnotatedDataFrame",data=groups,varMetadata=meta)
+exset<-readCuffGeneFpkm(cuff,phenoData)
+@
+
+
+\section{Appendix}
+
+\subsection{The keytable class}
+
+The \rcl{keytable} class is designed to count align data and for computation of expression values for experimental groups separately. The class is only internally used by the \rfc{readTabledBamGaps} function.
+
+Group assignment of probes (BAM-files) is done by providing a profile table. Align count values then can subsequently be added to the created object. After data-collection a result table can be retrieved.\\
+
+For description of functionality first artificial data is created. A profile-table defines the group association of all analyzed probes (usually each probe is one BAM-file).
+<<>>=
+prof<-data.frame(gen=factor(c("w","m","w","w"),levels=c("m","w")),
+                 loc=factor(c("thx","thx","abd","abd"),levels=c("thx","abd")),
+                 ag =factor(c("y","y","m","o"),levels=c("y","m","o")))
+prof
+@
+
+We the create artificial align-count data for several some gap-sites. The input table \robj{key} allows for multipe entries for the same site. For the output the sites are merged (and align numbers summed) into \robj{ku}.
+<<>>=
+key1<-data.frame(id=1:5,
+                 seqid=c(1,1,2,2,3),
+                 lend=c(10,20,10,30,10),
+                 rstart=c(20,30,20,40,20),
+                 nAligns=c(11,21,31,41,51))
+
+key2<-data.frame(id=1:5,
+                 seqid=c(1,1,2,2,4),
+                 lend=c(10,20,10,30,50),
+                 rstart=c(20,30,20,40,70),
+                 nAligns=c(21,22,23,24,25))
+
+key3<-data.frame(id=1:5,
+                 seqid=c(1,2,4,5,5),
+                 lend=c(10,10,60,10,20),
+                 rstart=c(20,20,80,20,30),
+                 nAligns=c(31,32,33,34,35))
+
+key<-rbind(key1,key2,key3)
+
+# Group positions
+ku<-aggregate(data.frame(nAligns=key$nAligns),
+              by=list(seqid=key$seqid,lend=key$lend,rstart=key$rstart),
+              FUN=sum)
+@
+
+The next steps comes in two versions: one version where only number of probes are counted for each site and the second version where aligns are counted for each site. The first example shows the probe-counting procedure: The \rcl{keyProfiler} object is created from the first probe data and subsequently data for two probes is added (via \rfc{addKeyTable}):
+<<>>=
+# Count probes
+kpc<-new("keyProfiler",keyTable=key1[,c("seqid","lend","rstart")],prof=prof)
+addKeyTable(kpc,keyTable=key2[,c("seqid","lend","rstart")],index=2)
+addKeyTable(kpc,keyTable=key3[,c("seqid","lend","rstart")],index=4)
+
+@
+
+The result is then appended to the grouped input table:
+<<>>=
+cp<-appendKeyTable(kpc,ku,prefix="c.")
+cp
+@
+
+The second version counts align numbers over probes:
+<<>>=
+# Count aligns
+kpa<-new("keyProfiler",keyTable=key1[,c("seqid","lend","rstart")],prof=prof,values=key1$nAligns)
+kpa@ev$dtb
+addKeyTable(kpa,keyTable=key2[,c("seqid","lend","rstart")],index=2,values=key2$nAligns)
+addKeyTable(kpa,keyTable=key3[,c("seqid","lend","rstart")],index=4,values=key3$nAligns)
+ca<-appendKeyTable(kpa,ku,prefix="aln.")
+ca
+@
+
+The \rfc{readTableBamGaps} function uses both versions simultaneously: Two \rcl{keyProfiler} objects keep probe and align data separately. The two tables are then appended to the key table subsequently.
+
+\bibliographystyle{plain}
+\bibliography{spliceSites}
+
+\end{document}
