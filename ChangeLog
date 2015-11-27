@@ -1,0 +1,52 @@
+ 
+## + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + ##
+## Change Log for package spliceSites
+## + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + ##
+##                                                                           
+##  Project   : spliceSites                                                  
+##  Created   : 29.Okt.2012                                                  
+##  Author    : W. Kaisers                                                   
+##  Content   : Funktionality for working with RNA-seq splice-sites data     
+##              based von rbamtools and refGenome packages.                  
+##              for usage in R                                               
+## + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + ##
+                                                                           
+Changelog :                                                              
+12.11.12  : Corrected false calculation of gaplen in merge.alignGaps     
+12.12.12  : Added Dependency on BiocGenerics                             
+03.12.12  : Corrected and checked Proteomic pipeline: lJunc,rJunc,       
+            lCodons,rCodons,lrJunc,lrCodons                              
+04.12.12  : Added keyProfiler class                                      
+11.01.13  : 0.1.1                                                        
+06.02.13  : Added readMergedBamSites function which uses                 
+            rbamtools:::bamSiteLists                                     
+18.02.13  : 0.2.1                                                        
+28.05.13  : 0.3.1                                                        
+03.06.13  : 0.3.3 added suppression of scientific notation in            
+            write.annDNAtables                                           
+03.06.13  : 0.3.4 readExpSet                                             
+03.07.13  : 0.4.0 Added truncateSeq (C-routine) and changed              
+            trypsinCleave to C-implementation                            
+09.07.13  : 0.5.0 Added maxEnts                                          
+10.07.13  : 0.5.1 Changed position entries from 0-based to 1-based       
+10.07.13  : 0.5.2 Removed gapRanges, gapProbes and derived (aaX, dnaX)   
+            classes                                                      
+18.07.13  : 0.6.0 Renamed gapAligns to alignGaps, removed                
+            readMergedBamGapProbes                                       
+24.07.13  : 0.7.0 Renamed alignGaps to gapSites                          
+31.07.13  : 0.8.0 Removed dependency on data.table, C-version for        
+            alt_group                                                    
+09.08.13  : 0.99.0 All C routines valgrind checked                       
+21.08.13  : 0.99.7 Review by Marc Carlson:                               
+            Added biocViews in DESCRIPTION                               
+            (RNAseq,GeneExpression,DifferentialExpression,Proteomics)    
+            Added Collate entry in DESCRIPTION                           
+            Added R-registration of C-routines                           
+            Switched calloc to R_alloc in C (valgrind tested)            
+21.08.13  : 0.99.8  Added functions for hbond score (valgrind tested)    
+23.08.13  : 0.99.9  Submission update for Bioconductor                   
+23.08.13  : 0.99.10 Added get_dna_nmers (valgrind tested)                
+03.12.13  : 1.1.1  Changed annotate.gapSites function                    
+29.01.14  : 1.1.3  Added NA handling for Strings in maxent and hbond     
+
+
