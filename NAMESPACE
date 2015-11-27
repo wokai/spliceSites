@@ -4,7 +4,11 @@ useDynLib(spliceSites)
 importFrom(BiocGenerics,annotation)
 importFrom(BiocGenerics,"annotation<-")
 importFrom(BiocGenerics,strand)
-import(methods,rbamtools,refGenome,doBy,Biobase,Biostrings,seqLogo)
+importFrom(doBy,summaryBy)
+importFrom(seqLogo,makePWM)
+importFrom(seqLogo,seqLogo)
+importFrom(IRanges,RleViewsList)
+import(methods,rbamtools,refGenome,Biobase,Biostrings)
 export(
         alignGapList,
         as.data.frame.gapSites,
@@ -17,16 +21,16 @@ export(
         rangeByGeneName,
         readCuffGeneFpkm,
         readExpSet,
-	readMergedBamGaps,
+        readMergedBamGaps,
         readTabledBamGaps,
-	getGapSites,
+        getGapSites,
         merge.gapSites,
         truncate_seq
 )
 exportMethods(
     addHbond,
     addKeyTable,
-    addGeneAlignPart,
+    addGeneAligns,
     addMaxEnt,
     basedir,
     "basedir<-",
@@ -65,6 +69,7 @@ exportMethods(
     lstart,
     nAligns,
     nAlignGaps,
+    plotGeneAlignDepth,
     plot_diff,
     plot_diff_ranks,
     rCodons,
@@ -88,7 +93,6 @@ exportMethods(
     sortTable,
     start,
     strand,
-    "strand<-",
     translate,
     trim_left,
     trim_right,

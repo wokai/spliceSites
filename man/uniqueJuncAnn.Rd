@@ -1,7 +1,7 @@
 \name{uniqueJuncAnn}
 \alias{uniqueJuncAnn}
 \alias{uniqueJuncAnn-methods}
-\alias{uniqueJuncAnn,ExpressionSet-method}
+\alias{uniqueJuncAnn,ExpressionSet,refJunctions-method}
 \title{
 uniqueJuncAnn method for ExpressionSet
 }

@@ -569,6 +569,12 @@ SEXP maxent_seq_score5(SEXP pSeq, SEXP pFrame,SEXP pMe2x5)
 	if(TYPEOF(pMe2x5)!=REALSXP)
 		error("[maxent_seq_score5] pMe2x5 must be REAL!");
 
+	if(STRING_ELT(pSeq,0)==NA_STRING)
+	{
+		Rprintf("[maxent_seq_score5] pSeq is NA!");
+		return R_NilValue;
+	}
+
     ////////////////////////////////////////////////////////
     //
     //    pos=1-based last exon nuc = 3, l5seq=9
@@ -667,30 +673,35 @@ SEXP maxent_score5(SEXP pSeq, SEXP pPos, SEXP pMe2x5)
 		if(LENGTH(STRING_ELT(pSeq,i))<l5seq)
 			error("[score5.maxEntScore] Sequence must at least contain %u nucs!",l5seq);
 
-		const char *inseq=CHAR(STRING_ELT(pSeq,i));
 
-		// pos = 1-based position of last exonic nucleotide
-		// Start position (pos-n5ExonNucs):
-		// 			Includes last n5ExonNucs exonic nucleotides (when using 0-based array index)
-		// Reads values for l5seq nuc's.
-		for(j=0,k=pos-n5ExonNucs;j<l5seq;++j,++k)
-		{
-			seq[j]=ACGT[(unsigned)inseq[k]];
-			if(seq[j]==zvl)
-			{
-				seq[0]=zvl;
-				break;
-			}
-		}
-		if(seq[0]!=zvl)
-		{
-			// numeric factors are statically used in this function (-> no variable)
-			idx=seq[0]*4096+seq[1]*1024+seq[2]*256+seq[5]*64+seq[6]*16+seq[7]*4+seq[8];
-			REAL(ans)[i]=log2(scoreconsensus5(seq[3],seq[4])*REAL(pMe2x5)[idx]);
-		}
-		else
+		if(STRING_ELT(pSeq,i)==NA_STRING)
 			REAL(ans)[i]=NA_REAL;
+		else
+		{
+			const char *inseq=CHAR(STRING_ELT(pSeq,i));
 
+			// pos = 1-based position of last exonic nucleotide
+			// Start position (pos-n5ExonNucs):
+			// 			Includes last n5ExonNucs exonic nucleotides (when using 0-based array index)
+			// Reads values for l5seq nuc's.
+			for(j=0,k=pos-n5ExonNucs;j<l5seq;++j,++k)
+			{
+					seq[j]=ACGT[(unsigned)inseq[k]];
+				if(seq[j]==zvl)
+				{
+					seq[0]=zvl;
+					break;
+				}
+			}
+			if(seq[0]!=zvl)
+			{
+				// numeric factors are statically used in this function (-> no variable)
+				idx=seq[0]*4096+seq[1]*1024+seq[2]*256+seq[5]*64+seq[6]*16+seq[7]*4+seq[8];
+				REAL(ans)[i]=log2(scoreconsensus5(seq[3],seq[4])*REAL(pMe2x5)[idx]);
+			}
+			else
+				REAL(ans)[i]=NA_REAL;
+		}
 	}
 	UNPROTECT(1);
 	return ans;
@@ -705,6 +716,12 @@ SEXP maxent_seq_score3(SEXP pSeq, SEXP pFrame,SEXP pMeList)
 		error("[maxent_seq_score3] pFrame must be INTEGER!");
 	if(TYPEOF(pMeList)!=VECSXP)
 		error("[maxent_seq_score3] pMeList must be VECSXP!");
+
+	if(STRING_ELT(pSeq,0)==NA_STRING)
+	{
+		Rprintf("[maxent_seq_score3] pSeq is NA!");
+		return R_NilValue;
+	}
 
     ////////////////////////////////////////////////////////
     //
@@ -753,39 +770,45 @@ SEXP maxent_seq_score3(SEXP pSeq, SEXP pFrame,SEXP pMeList)
 		// Start position (pos-n3ExonNucs):
 		// 			Includes last n3ExonNucs exonic nucleotides (when using 0-based array index)
 		// Reads values for l5seq nucleotides (static string length).
-		const char* inseq=CHAR(STRING_ELT(pSeq,0));
-		for(j=0,k=pos-n3ExonNucs;j<l3seq;++j,++k)
-		{
-			seq[j]=ACGT[(unsigned)inseq[k]];
-			if(seq[j]==zvl)
-			{
-				seq[0]=zvl;
-				break;
-			}
-		}
-		if(seq[0]!=zvl)
-		{
-			// + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + //
-			// Calculate sequence score:
-			for(j=0;j<nsc3;++j)
-			{
-				// calculate score-index from sequence
-				// ("hashseq" function in score3.pl)
-				pMe=VECTOR_ELT(pMeList,j);
-				// score_columns values are stored in sc3c.
-				scidx=0;
-				for(k=0,l=(sc3l[j]-1);k<sc3l[j];++k,--l)
-				scidx+=four3[l] * seq[sc3c[sc3s[j]+k]];
 
-				// Read score value from input table
-				score[j]=REAL(pMe)[scidx];
-			}
-			finalscore=(score[0]*score[1]*score[2]*score[3]*score[4])/
-					(score[5]*score[6]*score[7]*score[8]);
-			REAL(ans)[i]=log2(scoreconsensus3((unsigned char)seq[18],(unsigned char)seq[19])*finalscore);
-		}
-		else
+		if(STRING_ELT(pSeq,i)==NA_STRING)
 			REAL(ans)[i]=NA_REAL;
+		else
+		{
+			const char* inseq=CHAR(STRING_ELT(pSeq,0));
+			for(j=0,k=pos-n3ExonNucs;j<l3seq;++j,++k)
+			{
+				seq[j]=ACGT[(unsigned)inseq[k]];
+				if(seq[j]==zvl)
+				{
+					seq[0]=zvl;
+					break;
+				}
+			}
+			if(seq[0]!=zvl)
+			{
+				// + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + //
+				// Calculate sequence score:
+				for(j=0;j<nsc3;++j)
+				{
+					// calculate score-index from sequence
+					// ("hashseq" function in score3.pl)
+					pMe=VECTOR_ELT(pMeList,j);
+					// score_columns values are stored in sc3c.
+					scidx=0;
+					for(k=0,l=(sc3l[j]-1);k<sc3l[j];++k,--l)
+					scidx+=four3[l] * seq[sc3c[sc3s[j]+k]];
+
+					// Read score value from input table
+					score[j]=REAL(pMe)[scidx];
+				}
+				finalscore=(score[0]*score[1]*score[2]*score[3]*score[4])/
+						(score[5]*score[6]*score[7]*score[8]);
+				REAL(ans)[i]=log2(scoreconsensus3((unsigned char)seq[18],(unsigned char)seq[19])*finalscore);
+			}
+			else
+				REAL(ans)[i]=NA_REAL;
+		}
 	}
 	UNPROTECT(1);
 	return ans;
@@ -1112,28 +1135,33 @@ static R_INLINE double do_calc_hbs(const char * const inseq, const double * cons
 
 SEXP hbond_score(SEXP pSeq,SEXP pHb)
 {
+	const unsigned nh=262144;
+	const unsigned ns=LENGTH(pSeq);
+	unsigned i;
+	SEXP res;
+
 	if(TYPEOF(pSeq)!=STRSXP)
 		error("[hbond_score] pSeq must be STRING!");
 	if(TYPEOF(pHb)!=REALSXP)
 		error("[hbond_score] pHb must be REAL!");
 
-	const unsigned nh=262144;
-	const unsigned ns=LENGTH(pSeq);
 	if(LENGTH(pHb)!=nh)
 		error("[hbond_score] pHb must have length 262144!");
-
-	SEXP res;
 	PROTECT(res=allocVector(REALSXP,ns));
 
-	unsigned i;
 	for(i=0;i<ns;++i)
 	{
-		const char *inseq=CHAR(STRING_ELT(pSeq,i));
-		// Score 0 when first exon nucs unequal 'GT'
-		if((ACGT[(unsigned)inseq[3]]!=g_val) | (ACGT[(unsigned)inseq[4]]!=t_val))
+		if(STRING_ELT(pSeq,i)==NA_STRING)
 			REAL(res)[i]=0;
 		else
-			REAL(res)[i]=do_calc_hbs(inseq,REAL(pHb));
+		{
+			const char *inseq=CHAR(STRING_ELT(pSeq,i));
+			// Score 0 when first exon nucs unequal 'GT'
+			if((ACGT[(unsigned)inseq[3]]!=g_val) | (ACGT[(unsigned)inseq[4]]!=t_val))
+				REAL(res)[i]=0;
+			else
+				REAL(res)[i]=do_calc_hbs(inseq,REAL(pHb));
+		}
 	}
 	UNPROTECT(1);
 	return res;

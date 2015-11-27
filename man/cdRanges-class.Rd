@@ -8,9 +8,6 @@
 \alias{getSequence}
 \alias{getSequence-methods}
 \alias{getSequence,cdRanges-method}
-\alias{seqlogo}
-\alias{seqlogo-methods}
-\alias{seqlogo,cdRanges-method}
 \alias{translate}
 \alias{translate-methods}
 \alias{translate,cdRanges-method}

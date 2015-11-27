@@ -2,7 +2,6 @@
 \alias{gapSites}
 \alias{dnaGapSites}
 \alias{dnaGapSites-methods}
-\alias{dnaGapSites,gapSites-method}
 \title{Creating 'gapSites' and 'dnaGapSites' objects.}
 \description{\code{gapSites} creates objects of class \code{gapSites} from scratch. \code{dnaGapSites} creates objects of class \code{dnaGapSites} from \code{gapSites} objects.}
 \usage{
