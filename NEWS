@@ -1,0 +1,17 @@
+CHANGES IN VERSION 1.3.2
+-------------------------
+
+NEW FEATURES
+
+    o Included this NEWS file and a ChangeLog file
+
+    o Added test directory (tests are executed on R CMD check)
+
+
+SIGNIFICANT USER-VISIBLE CHANGES
+
+    o 
+
+BUG FIXES
+
+    o (none)
