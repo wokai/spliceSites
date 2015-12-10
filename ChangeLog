@@ -47,6 +47,9 @@ Changelog :
 23.08.13  : 0.99.9  Submission update for Bioconductor                   
 23.08.13  : 0.99.10 Added get_dna_nmers (valgrind tested)                
 03.12.13  : 1.1.1  Changed annotate.gapSites function                    
-29.01.14  : 1.1.3  Added NA handling for Strings in maxent and hbond     
+29.01.14  : 1.1.3  Added NA handling for Strings in maxent and hbond
+11.11.14  : 1.3.3  Changed annotation procedure to overlapJuncs
+27.11.15  : 1.11.0 Submitted actual revision to BioC-devel
+10.12.15  : 1.13.0 Corrected two errors seen on BioC-check
 
 

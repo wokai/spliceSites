@@ -12,7 +12,7 @@
 \usepackage{helvet}                         % Actually switches the default sans serif font to Nimbus Sans L
 \usepackage{courier}
 
-\usepackage[ngerman]{babel}
+%\usepackage[ngerman]{babel}
 \usepackage[utf8]{inputenc}                 % utf8 umlaut
 
 \usepackage{booktabs}                       % Table-Style
@@ -548,7 +548,7 @@ using the \rfc{strand} function.
 strand(ga)<-getAnnStrand(ga)
 @
 
-\paragraph{addGeneAlignPart} adds information about distribution of aligns
+\paragraph{addGeneAligns} adds information about distribution of aligns
 over different gap-sites for each gene.
 <<>>=
 gap<-addGeneAligns(ga)
